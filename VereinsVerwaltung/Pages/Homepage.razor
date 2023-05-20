@@ -1,0 +1,399 @@
+﻿@page "/"
+@using Blazorise.DataGrid
+@using Blazorise.Components
+@using VereinsVerwaltung.Model
+@using VereinsVerwaltung.Service
+@using System.Dynamic;
+@inject IJSRuntime JS
+
+<PageTitle>ETL ONLINE</PageTitle>
+
+    @if (!dataLoaded)
+    {
+        <div class="upload-modal">
+		    <div class="upload-modal-header">
+		    	<div class="upload-modal-logo">
+		    		<span class="logo-circle">
+		    			<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="419.116" viewBox="0 0 512 419.116">
+		    				<defs>
+		    					<clipPath id="clip-folder-new">
+		    						<rect width="512" height="419.116" />
+		    					</clipPath>
+		    				</defs>
+		    				<g id="folder-new" clip-path="url(#clip-folder-new)">
+		    					<path id="Union_1" data-name="Union 1" d="M16.991,419.116A16.989,16.989,0,0,1,0,402.125V16.991A16.989,16.989,0,0,1,16.991,0H146.124a17,17,0,0,1,10.342,3.513L227.217,57.77H437.805A16.989,16.989,0,0,1,454.8,74.761v53.244h40.213A16.992,16.992,0,0,1,511.6,148.657L454.966,405.222a17,17,0,0,1-16.6,13.332H410.053v.562ZM63.06,384.573H424.722L473.86,161.988H112.2Z" fill="var(--c-action-primary)" stroke="" stroke-width="1" />
+		    				</g>
+		    			</svg>
+		    		</span>
+		    	</div>
+		    	<div>
+		    		<h2 class="upload-modal-title">File Importer</h2>
+		    	</div>
+		    </div>
+		    <div class="upload-modal-body">
+		    	<button class="upload-area" disabled>
+		    		<span class="upload-area-title">
+		    			<div class="icons fa-4x">
+		    				<i class="fas fa-file-image"></i>
+		    				<i class="fas fa-file-alt"></i>
+		    				<i class="fas fa-file-pdf"></i>
+		    			</div>
+		    			<br /> Please select a file.
+		    		</span>
+		    		<span class="upload-area-description">
+                        <InputFile OnChange="HandleSelection" multiple/>
+		    		</span>
+		    	</button>
+		    </div>
+        </div>
+    }
+    else
+    {
+        <body style="overflow:hidden">
+            <DataGrid Data="internalIdList" FixedHeaderDataGridHeight="90vh" FixedHeaderDataGridMaxHeight="90vh" FixedHeader ShowPager Responsive Hoverable="true" Striped Narrow Bordered="true" Filterable FilterMethod="DataGridFilterMethod.StartsWith" PageSize="50">
+            <DataGridColumns>
+            @*<DataGridColumn Caption="InterneId"><DisplayTemplate><Text>@context</Text></DisplayTemplate></DataGridColumn>     Show Internal Id*@
+            @foreach (string? columns in data.Select(x => x.Header).Distinct())
+                {
+                    <DataGridColumn HeaderTextAlignment="TextAlignment.Center" TextAlignment="TextAlignment.Center" Caption="@columns">
+                        <DisplayTemplate>
+                            <Text>
+                                @if (null != data.Where(x => x.InterneId == context && x.Header == columns).Select(x => x.Inhalt).FirstOrDefault())
+                            {
+                                    @data.Where(x=> x.InterneId == context && x.Header == columns).Select(x=> x.Inhalt).First().ToString()
+                            }
+                            </Text>
+                        </DisplayTemplate>
+                    </DataGridColumn>
+                }
+                </DataGridColumns>
+            <ButtonRowTemplate>
+                <Button Class="btn-dark" Clicked="columnEditModal.Show">Connect Columns</Button>
+                <Button Class="btn-dark" Clicked="downloadModal.Show">Download File</Button>
+                <Button Class="btn-dark" Clicked="aidModal.Show">A.I.D.</Button>    @*Remove Inconsistent Data*@
+            </ButtonRowTemplate>
+            </DataGrid>
+            <Modal @ref="columnEditModal">
+                <ModalContent Centered Size="ModalSize.ExtraLarge">
+                    <ModalHeader>
+                        <ModalTitle>Connect Columns from
+                            <SelectList Class="rounded-0 border-dark"
+                                Style="width:8vw"
+                                TItem="string"
+                                TValue="string"
+                                DefaultItemText="@("not selected")"
+                                @bind-SelectedValue="selectedMergeMethod"
+                                Data="mergeMethods"
+                                TextField="@((item)=>item)"
+                                ValueField="@((item)=>item)" />
+                    @if (selectedMergeMethod == "same file")
+                    {
+                            <SelectList Class="rounded-0 border-dark"
+                                Style="width:8vw"
+                                TItem="string"
+                                TValue="string"
+                                DefaultItemText="@("not selected")"
+                                @bind-SelectedValue="selectedFile"  
+                                Data="(data.Select(x => x.FileName).Distinct())"
+                                TextField="@((item)=>item)"
+                                ValueField="@((item)=>item)"/>
+                    }
+                    </ModalTitle>
+                    </ModalHeader>
+                    <ModalBody Style="text-align:center">
+                        <Row>
+                            <Column>
+                                <TextEdit @bind-Text="connectionHeader"></TextEdit>Column headername after connection
+                            </Column>
+                            @if (selectedMergeMethod == "diff. files")
+                            {
+                            @foreach (string? fileName in data.Select(x => x.FileName).Distinct())
+                            {
+                                <Column>
+                                    <SelectList Class="rounded-0 border-dark"
+                                    TItem="string"
+                                    TValue="string"
+                                    DefaultItemText="@("not selected")"
+                                    SelectedValueChanged="@SelectedValueChanged"
+                                    Data="(data.Where(x => x.FileName == fileName).Select(x => x.Header).Distinct().ToList())"
+                                    TextField="@((item)=>item)"
+                                    ValueField="@((item)=>item + "|" + fileName)" />@fileName
+                                </Column>
+                            }
+                            }
+                            else
+                            {
+                                @for (int counter = 1; counter < 3; counter++)
+                                {
+                                    <Column>
+                                        <SelectList Class="rounded-0 border-dark"
+                                        TItem="string"
+                                        TValue="string"
+                                        DefaultItemText="@("not selected")"
+                                        SelectedValueChanged="@SelectedValueChanged"
+                                        Data="(data.Where(x => x.FileName == selectedFile).Select(x => x.Header).Distinct().ToList())"
+                                        TextField="@((item)=>item)"
+                                        ValueField="@((item)=>item + "|" + selectedFile)" />@selectedFile
+                                    </Column>
+                                }
+                            }
+                        </Row>
+                        @if (connectionHeader != "" && connectionList.Count() != 0 && selectedMergeMethod == "diff. files")
+                        {
+                            <Button Class="btn-dark" Style="margin-top:5%; width:100%" Clicked="AddConnectionDiffFile">Add connection</Button>
+                        }
+                        @if (connectionHeader != "" && connectionList.Count() != 0 && selectedMergeMethod == "same file")
+                        {
+                            <Button Class="btn-dark" Style="margin-top:5%; width:100%" Clicked="AddConnectionSameFile">Add connection</Button>
+                        }
+                    </ModalBody>
+                </ModalContent>
+            </Modal>
+        <Modal @ref="downloadModal">
+            <ModalContent Centered Size="ModalSize.Default">
+            <ModalHeader>
+                <ModalTitle>Select a file to donwload it</ModalTitle>
+            </ModalHeader>
+            <ModalBody Style="text-align:center">
+                    <Row>
+                        <Column>
+                            <Button @onclick="@(()=>DownloadFileFromStream("xml"))" Class="btn-dark">
+                            XML
+                            </Button>
+                        </Column>
+                        <Column>
+                            <Button @onclick="@(()=>DownloadFileFromStream("csv"))" Class="btn-dark">
+                            CSV
+                            </Button>
+                        </Column>
+                        <Column>
+                            <Button @onclick="@(()=>DownloadFileFromStream("json"))" Class="btn-dark">
+                            JSON
+                            </Button>
+                        </Column>
+                    </Row>
+                </ModalBody>
+                </ModalContent>
+            </Modal>
+            <Modal @ref="aidModal">
+            <ModalContent Centered Size="ModalSize.Default">
+            <ModalHeader>
+                <ModalTitle>Select column to alter inconsistent data</ModalTitle>
+            </ModalHeader>
+            <ModalBody Style="text-align:center">
+                <Row>
+                    <Column>
+                        <SelectList Class="rounded-0 border-dark"
+                                    Style="width:8vw"
+                                    TItem="string"
+                                    TValue="string"
+                                    DefaultItemText="@("not selected")"
+                                    @bind-SelectedValue="selectedFile"
+                                    Data="(data.Select(x => x.FileName).Distinct())"
+                                    TextField="@((item)=>item)"
+                                    ValueField="@((item)=>item)" />
+                    </Column>
+                    <Column>
+                        @if (selectedFile != "")
+                            {
+                                <SelectList Class="rounded-0 border-dark"
+                                    TItem="string"
+                                    TValue="string"
+                                    DefaultItemText="@("not selected")"
+                                    @bind-SelectedValue = "selectedColumn"
+                                    Data="(data.Where(x => x.FileName == selectedFile).Select(x => x.Header).Distinct().ToList())"
+                                    TextField="@((item)=>item)"
+                                    ValueField="@((item)=>item + "|" + selectedFile)" /> @selectedFile
+                            }
+                    </Column>
+                </Row>
+                <Row>
+                    <Column>
+                            @if (selectedColumn != "")
+                            {
+                                <TextEdit @bind-Text="oldData"></TextEdit>
+                                <strong>Old</strong>
+                                <TextEdit @bind-Text="newData"></TextEdit>
+                                <strong>New</strong>
+                            }
+                    </Column>
+                </Row>
+                @if (selectedColumn != "")
+                {
+                   <Button Class="btn-dark" Clicked="CustomAID" Style="margin-top:5%; width:100%">Start A.I.D.</Button>
+                }
+                </ModalBody>
+            </ModalContent>
+            </Modal>
+        </body>
+    }
+
+@code{
+    [Inject] IMessageService messageService { get; set; }   //Popup Message Service
+    private List<SingleData> data = new();  //Our "staging" data
+    private List<SingleData> connectionList = new();    //Our list to connect columns
+    private List<int> internalIdList = new();   //Internal id list to keep track of each row and build our front end dynamicly
+    private Modal? columnEditModal; // reference to the modal component
+    private Modal? downloadModal; // reference to the modal component
+    private Modal? aidModal; // reference to the modal component
+    private string? connectionHeader = "";
+    private string[] mergeMethods = new[] { "diff. files", "same file" };   //List of header/column merging methods
+    private string? selectedMergeMethod = "";
+    private string? selectedColumn = "";
+    private string? selectedFile = "";
+    private string? oldData = "";
+    private string? newData = "";
+    private bool dataLoaded = false;    //keeps track if the user uploaded any files
+    private decimal oldFileSize = 0;   //to keep track of the uploaded file size
+    private decimal newFileSize = 0;    //to keep track of the downloadable/new/created file size
+    
+    private async void HandleSelection(InputFileChangeEventArgs files)  //Handles file selection(creates a memory stream for each file and gives it to our reader method which creates our data)
+    {
+        foreach(var file in files.GetMultipleFiles())
+        {
+            if (file != null)
+            {
+                Reader reader = new();
+                var ms = new MemoryStream();
+                await file.OpenReadStream().CopyToAsync(ms);
+                string fileExtension = file.Name[(file.Name.LastIndexOf('.') + 1)..].ToUpper();
+                switch (fileExtension)
+                {
+                    case "XML":
+                        data = reader.XML(ms, file.Name, data);
+                        break;
+                    case "JSON":
+                        data = reader.JSON(ms, file.Name, data);
+                        break;
+                    case "CSV":
+                        data = reader.CSV(ms, file.Name, data);
+                        break;
+                }
+                Console.WriteLine("Following file successfully imported: " + file.Name);
+                decimal tmpFileSize = ms.Length;
+                oldFileSize += tmpFileSize;
+                Console.WriteLine("File size: " + tmpFileSize);
+                ms.Close();
+            }
+        }
+        for (int counter = 1; counter < (data.Max(x => x.InterneId) + 1); counter++)
+        {
+            internalIdList.Add(counter);
+        }
+        dataLoaded = true;
+        StateHasChanged();
+    }
+
+    private Task SelectedValueChanged(string value) //Handles the selection of our "connecting header" method
+    {
+        if (value != "not selected")
+        {
+            List<string> tmpList = value.Split("|").ToList();
+            SingleData singleData = new();
+            singleData.Header = tmpList[0];
+            singleData.FileName = tmpList[1];
+            if(selectedMergeMethod != "same file")
+            {
+                try { connectionList.RemoveAll(x => x.FileName == singleData.FileName); } catch { }
+            }
+            connectionList.Add(singleData);
+        }
+        return Task.CompletedTask;
+    }
+
+    private void AddConnectionDiffFile()    //Handles the connection of our "connecting header" method (if columns/header from diff. files)
+    {
+        Console.Write("Merging columns ");
+        foreach(SingleData singleData in connectionList)
+        {
+            foreach (SingleData tmpData in data.Where(x => x.FileName == singleData.FileName && x.Header == singleData.Header))
+            {
+                data.Find(x => x == tmpData).Header = connectionHeader;
+            }
+            Console.Write("["+singleData.Header + "]");
+        }
+        Console.Write(" to ["+connectionHeader+"]");
+        connectionList.Clear();
+        connectionHeader = "";
+        columnEditModal.Hide();
+    }
+
+    private void AddConnectionSameFile()    //Handles the connection of our "connecting header" method (if columns/header from the same file)
+    {
+        string seconHeader = connectionList[1].Header;
+        Console.Write("Merging columns ");
+        foreach (SingleData tmpData in data.Where(x => x.FileName == connectionList[0].FileName && x.Header == connectionList[0].Header))
+        {
+            data.Find(x => x == tmpData).Header = connectionHeader;
+            data.Find(x => x == tmpData).Inhalt = data.Find(x => x == tmpData).Inhalt + " " + data.Find(x => x.InterneId == tmpData.InterneId && x.Header == seconHeader && x.FileName == selectedFile).Inhalt;
+        }
+        data.RemoveAll(x=> x.Header == seconHeader && x.FileName == selectedFile);
+        Console.Write("[" + connectionList[0].Header + "]" + "[" + connectionList[1].Header + "]");
+        Console.Write(" to [" + connectionHeader + "]");
+        connectionList.Clear();
+        connectionHeader = "";
+        columnEditModal.Hide();
+    }
+
+    private void CustomAID()    //A.I.D. method to alter inconsistent data
+    {
+        foreach (SingleData tmpSingleData in data.Where(x => x.FileName == selectedFile && x.Inhalt == oldData).ToList())
+        {
+            if(data.FirstOrDefault(x => x == tmpSingleData).Inhalt != null)
+            {
+                data.FirstOrDefault(x => x == tmpSingleData).Inhalt = newData;
+            }
+        }
+        aidModal.Hide();
+    }
+
+    private async Task DownloadFileFromStream(string selectedFileFormat)    //Uploads a file to the client in the format that he/she/it(s muss mit) selected
+    {
+        var fileName = "etlFile";
+        Writer writer = new();
+        MemoryStream memoryStream = new();
+        switch (selectedFileFormat)
+        {
+            case "csv":
+                {
+                    memoryStream = writer.CSV(data);
+                    fileName += ".csv";
+                    break;
+                }
+            case "xml":
+                {
+                    memoryStream = writer.XML(data);
+                    fileName += ".xml";
+                    break;
+                }
+            case "json":
+                {
+                    memoryStream = writer.JSON(data);
+                    fileName += ".json";
+                    break;
+                }
+        }
+        using var streamRef = new DotNetStreamReference(stream: memoryStream);
+        newFileSize = streamRef.Stream.Length;
+        Console.WriteLine("Following file created and downloaded: " + fileName);
+        Console.WriteLine("File size: " + newFileSize);
+        await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+        decimal fileSizeDiff = (newFileSize - oldFileSize);
+        string message;
+        if(fileSizeDiff > 0)
+        {
+            message = "The file size has increased by " + fileSizeDiff + " Byte";
+        }
+        else if (fileSizeDiff < 0)
+        {
+            message = "The file size has decreased by " + fileSizeDiff + " Byte";
+        }
+        else
+        {
+            message = "The file size has remained the same";
+        }
+        await messageService.Info(message);
+    }
+
+
+}
